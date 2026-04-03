@@ -319,7 +319,7 @@ jobs:
             dist/TgWsProxy_linux_amd64.deb
   
   build-linux-22-04:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
