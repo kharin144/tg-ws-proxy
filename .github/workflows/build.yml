@@ -317,6 +317,98 @@ jobs:
           path: |
             dist/TgWsProxy_linux_amd64
             dist/TgWsProxy_linux_amd64.deb
+  
+  build-linux-22-04:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-venv \
+            python3-dev \
+            python3-gi \
+            gir1.2-ayatanaappindicator3-0.1 \
+            python3-tk
+
+      - name: Create venv with system site-packages
+        run: python3 -m venv --system-site-packages .venv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install .
+          .venv/bin/pip install "pyinstaller==6.13.0"
+
+      - name: Build binary with PyInstaller
+        run: .venv/bin/pyinstaller packaging/linux.spec --noconfirm
+
+      - name: Rename binary artifact
+        run: mv dist/TgWsProxy dist/TgWsProxy_linux_amd64
+
+      - name: Create .deb package
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${VERSION#v}"
+          PKG_ROOT="pkg"
+
+          rm -rf "$PKG_ROOT"
+          mkdir -p \
+            "$PKG_ROOT/DEBIAN" \
+            "$PKG_ROOT/usr/bin" \
+            "$PKG_ROOT/usr/share/applications" \
+            "$PKG_ROOT/usr/share/icons/hicolor/256x256/apps"
+
+          install -m 755 dist/TgWsProxy_linux_amd64 "$PKG_ROOT/usr/bin/tg-ws-proxy"
+
+          .venv/bin/python - <<PY
+          from PIL import Image
+
+          Image.open("icon.ico").save(
+              "${PKG_ROOT}/usr/share/icons/hicolor/256x256/apps/tg-ws-proxy.png",
+              "PNG",
+          )
+          PY
+
+          cat > "$PKG_ROOT/usr/share/applications/tg-ws-proxy.desktop" <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=TG WS Proxy
+          GenericName=Telegram Proxy
+          Comment=Telegram Desktop WebSocket Bridge Proxy
+          Exec=tg-ws-proxy
+          Icon=tg-ws-proxy
+          Terminal=false
+          Categories=Network;
+          StartupNotify=true
+          Keywords=telegram;proxy;websocket;
+          EOF
+
+          cat > "$PKG_ROOT/DEBIAN/control" <<EOF
+          Package: tg-ws-proxy
+          Version: ${VERSION}
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Flowseal
+          Depends: libgtk-3-0, libayatana-appindicator3-1, python3-tk
+          Description: Telegram Desktop WebSocket Bridge Proxy
+           MTProto/WebSocket bridge proxy for Telegram Desktop with tray UI.
+          EOF
+
+          dpkg-deb --build --root-owner-group \
+            "$PKG_ROOT" \
+            "dist/TgWsProxy_linux_amd64.deb"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: TgWsProxy-linux
+          path: dist/TgWsProxy_ubuntu_22_amd64.deb
 
   release:
     needs: [build-windows, build-win7, build-macos, build-linux]
@@ -343,6 +435,7 @@ jobs:
             dist/TgWsProxy_macos_universal.dmg
             dist/TgWsProxy_linux_amd64
             dist/TgWsProxy_linux_amd64.deb
+            dist/TgWsProxy_ubuntu_22_amd64.deb
           draft: false
           prerelease: false
         env:
